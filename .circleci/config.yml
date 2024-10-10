@@ -1,0 +1,166 @@
+version: 2.1
+
+executors:
+  amd64:
+    machine:
+      image: ubuntu-2404:2024.05.1
+      docker_layer_caching: true
+    resource_class: medium
+  arm64:
+    machine:
+      image: ubuntu-2404:2024.05.1
+      docker_layer_caching: true
+    resource_class: arm.medium
+
+platforms: &platforms
+  - amd64
+  - arm64
+
+workflows:
+  build_test:
+    jobs:
+      - build:
+          stream: test
+          push: false
+          context: docker-publishing
+          matrix:
+            parameters:
+              executor: *platforms
+          filters:
+            branches:
+              ignore: [ main, releases ]
+
+
+  build_stable:
+    jobs:
+      - build:
+          stream: stable
+          context: docker-publishing
+          matrix:
+            parameters:
+              executor: *platforms
+          filters:
+            branches:
+              only: [ releases ]
+      - manifest:
+          stream: stable
+          context: docker-publishing
+          requires: [ build ]
+          filters:
+            branches:
+              only: [ releases ]
+
+  build_latest:
+    jobs:
+      - build:
+          stream: latest
+          context: docker-publishing
+          matrix:
+            parameters:
+              executor: *platforms
+          filters:
+            branches:
+              only: [ main ]
+      - manifest:
+          stream: latest
+          context: docker-publishing
+          requires: [ build ]
+          filters:
+            branches:
+              only: [ main ]
+
+
+  nightly_stable:
+    jobs:
+      - build:
+          stream: stable
+          context: docker-publishing
+          matrix:
+            parameters:
+              executor: *platforms
+      - manifest:
+          stream: stable
+          context: docker-publishing
+          requires: [ build ]
+          filters:
+            branches:
+              only: [ releases ]
+    triggers:
+      - schedule:
+          # Scheduled build for 2am AEST nightly.
+          cron: "0 15 * * *"
+          filters:
+            branches:
+              only: [ releases ]
+
+  nightly_latest:
+    jobs:
+      - build:
+          stream: latest
+          context: docker-publishing
+          matrix:
+            parameters:
+              executor: *platforms
+      - manifest:
+          stream: latest
+          context: docker-publishing
+          requires: [ build ]
+          filters:
+            branches:
+              only: [ main ]
+    triggers:
+      - schedule:
+          # Scheduled build for 2am AEST nightly.
+          cron: "0 15 * * *"
+          filters:
+            branches:
+              only: [ main ]
+
+jobs:
+  build:
+    parameters:
+      executor:
+        type: string
+      push:
+        type: boolean
+        default: true
+      stream:
+        type: string
+    executor: << parameters.executor >>
+    steps:
+      - checkout
+      - run:
+          name: Build, Test and Release
+          command: |
+            SHA1_VERSION="v2-$(git rev-parse --short HEAD)"
+            make build ARCH=<< parameters.executor >> VERSION_TAG=v2-<< parameters.stream >>
+            make build ARCH=<< parameters.executor >> VERSION_TAG=${SHA1_VERSION}
+      - when:
+          condition:
+            equal: [ true, << parameters.push >> ]
+          steps:
+            - run:
+                name: "Push image"
+                command: |
+                  echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+                  SHA1_VERSION="v2-$(git rev-parse --short HEAD)"
+                  make push ARCH=<< parameters.executor >> VERSION_TAG=v2-<< parameters.stream >>
+                  make push ARCH=<< parameters.executor >> VERSION_TAG=${SHA1_VERSION}
+  manifest:
+    docker:
+      - image: cimg/base:2024.09
+    parameters:
+      stream:
+        type: string
+    steps:
+      - checkout
+      - setup_remote_docker:
+          docker_layer_caching: true
+      - run:
+          name: Push Manifest
+          command: |
+            export DOCKER_CLI_EXPERIMENTAL=enabled
+            echo $DOCKER_PASS | docker login -u $DOCKER_USER --password-stdin
+            SHA1_VERSION="v2-$(git rev-parse --short HEAD)"
+            make manifest VERSION_TAG=v2-<< parameters.stream >>
+            make manifest VERSION_TAG=${SHA1_VERSION}
