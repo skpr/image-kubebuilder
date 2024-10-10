@@ -1,6 +1,6 @@
 #!/usr/bin/make -f
 
-REGISTRY=skpr/clamav
+REGISTRY=skpr/kubebuilder
 ARCH=amd64
 VERSION_TAG=v2
 
