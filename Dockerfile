@@ -7,7 +7,7 @@ RUN go install golang.org/x/lint/golint@latest && \
 
 ENV KUBEBUILDER_VERSION=4.3.1
 
-RUN curl -L https://github.com/kubernetes-sigs/kubebuilder/releases/download/v${KUBEBUILDER_VERSION}/kubebuilder_2.3.1_linux_amd64.tar.gz | tar -xz -C /tmp/ && \
+RUN curl -L https://github.com/kubernetes-sigs/kubebuilder/releases/download/v${KUBEBUILDER_VERSION}/kubebuilder_${KUBEBUILDER_VERSION}_linux_amd64.tar.gz | tar -xz -C /tmp/ && \
     mv /tmp/kubebuilder_${KUBEBUILDER_VERSION}_linux_amd64/bin/kubebuilder /usr/local/bin/kubebuilder && \
     mv /tmp/kubebuilder_${KUBEBUILDER_VERSION}_linux_amd64/bin/kubectl /usr/local/bin/kubectl
 
